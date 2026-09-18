@@ -1,5 +1,6 @@
 using backend.Data;
 using backend.Health;
+using backend.Database;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,17 @@ builder.Services.AddScoped<ITableSessionRepository, TableSessionRepository>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 var app = builder.Build();
+
+var connectionString = app.Configuration
+    .GetConnectionString("DefaultConnection");
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "ConnectionStrings:DefaultConnection is not configured.");
+}
+
+DatabaseMigrator.Run(connectionString);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
