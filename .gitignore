@@ -1,1 +1,37 @@
-.gitignore
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# .NET build output and local tooling
+**/[Bb]in/
+**/[Oo]bj/
+**/[Aa]rtifacts/
+**/[Pp]ackages/
+*.user
+*.suo
+*.rsuser
+.vs/
+
+# Node.js dependencies and generated output
+**/node_modules/
+**/build/
+**/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE and OS files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local database exports
+*.dump
+*.backup.gitignore
