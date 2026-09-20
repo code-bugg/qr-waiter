@@ -1,70 +1,26 @@
-# Getting Started with Create React App
+# TableBell frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React + TypeScript, served by Vite. A valid `/session/{guid}` opens the customer home with its menu/service actions and the fetched table number, status, times and optional order ID. Invalid links or failed lookups show an error page without mounting the customer home. `/` retains the customer, waiter and admin mockups. Preview banners and explanatory footers are not displayed.
 
-## Available Scripts
+From this folder:
 
-In the project directory, you can run:
+```bash
+npm ci
+cp .env.example .env.local
+npm run dev
+```
 
-### `npm start`
+Open http://localhost:5173/session/550e8400-e29b-41d4-a716-446655440001 after starting the backend. Use Node.js 22.18+ (22 LTS line) and npm; `package-lock.json` locks dependencies. Node 25.9.0 was used for this local check.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+`BACKEND_URL` defaults to `http://localhost:5001`. Set it in `.env.local` to use a different backend, then restart Vite. The proxy forwards `/api/table-sessions/` requests from the frontend origin; no backend CORS change is needed for this local setup. This is a local development/preview arrangement, not a cloud deployment configuration.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```bash
+npm test
+npm run typecheck
+npm run build
+npm run preview
+```
 
-### `npm test`
+The build creates `dist/`; preview also uses the local API proxy. Stop the dev server first because both use port 5173. A future static host must separately provide an API proxy and SPA route fallback for `/session/*`. Deployment is outside this iteration.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+See `../docs/table-session-api.md` for the contract and scenarios and `../docs/backend-handoff.md` for the two pending backend fixes. Tests cover the API adapter; actual database-to-browser checks are documented separately.
