@@ -55,7 +55,7 @@ curl http://localhost:5001/health
 curl http://localhost:5001/api/table-sessions/550e8400-e29b-41d4-a716-446655440001
 ```
 
-Known records return 200; malformed GUIDs return 400, unknown GUIDs 404, and database-operation failures 500. See the documented health/expiration limitations below.
+Known records return 200; malformed GUIDs return 400, unknown GUIDs 404, and database-operation failures 500. PostgreSQL determines expiration for active sessions whose expiration time is at or before the current database time, while health checks now execute a `SELECT 1` round trip before reporting healthy.
 
 ## Run the frontend
 
@@ -72,7 +72,7 @@ On PowerShell use `Copy-Item .env.example .env.local` instead of `cp` if needed.
 
 Open http://localhost:5173/session/550e8400-e29b-41d4-a716-446655440001 . The URL simulates scanning a QR code. The frontend forwards its same-origin API request to the local backend; `frontend/.env.local` can override `BACKEND_URL`. Restart the frontend after changing it. Keep both processes running.
 
-## Checks and known limitations
+## Checks
 
 ```bash
 cd frontend
@@ -83,6 +83,4 @@ npm run build
 - [API contract and manual scenarios](docs/table-session-api.md)
 - [Backend fixes to hand off](docs/backend-handoff.md)
 
-Two backend issues remain: database-driven expiration is not implemented, and a warmed pooled connection can make `/health` return 200 during a database outage. The UI displays the backend's status unchanged. The full first-iteration definition of done is not met until these fixes and the team's remaining backend tests/clean-clone checks are complete.
-
-Cloud deployment, HTTPS setup, accounts, session writes, orders and real QR generation remain outside this iteration.
+The database now resolves session expiry on the server side, and the health endpoint verifies a real PostgreSQL round trip before returning healthy. Cloud deployment, HTTPS setup, accounts, session writes, orders and real QR generation remain outside this iteration.
