@@ -12,7 +12,18 @@ public sealed class DatabaseHealthCheck(IDbConnectionFactory connectionFactory) 
         try
         {
             await using var connection = await connectionFactory.OpenConnectionAsync(cancellationToken);
-            return HealthCheckResult.Healthy("PostgreSQL is reachable.");
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT 1";
+            command.CommandTimeout = 5;
+
+            var result = await command.ExecuteScalarAsync(cancellationToken);
+            return result is not null
+                ? HealthCheckResult.Healthy("PostgreSQL is reachable.")
+                : HealthCheckResult.Unhealthy("PostgreSQL is unavailable.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception)
         {
