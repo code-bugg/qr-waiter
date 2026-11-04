@@ -76,3 +76,24 @@ export async function getTableSession(
   // PostgreSQL owns status/expiration. Do not reinterpret it using the device clock.
   return data;
 }
+
+export async function createTableSession(
+  tableId: number,
+  accessToken: string,
+  options: { fetcher?: typeof fetch } = {},
+): Promise<TableSession> {
+  const response = await (options.fetcher ?? fetch)('/api/table-sessions', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ tableId }),
+  });
+
+  if (!response.ok) throw new SessionError(response.status === 409 ? 'response' : 'server');
+  const data: unknown = await response.json();
+  if (!isTableSession(data)) throw new SessionError('response');
+  return data;
+}

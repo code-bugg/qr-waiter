@@ -86,3 +86,41 @@ npm run build
 Two backend issues remain: database-driven expiration is not implemented, and a warmed pooled connection can make `/health` return 200 during a database outage. The UI displays the backend's status unchanged. The full first-iteration definition of done is not met until these fixes and the team's remaining backend tests/clean-clone checks are complete.
 
 Cloud deployment, HTTPS setup, accounts, session writes, orders and real QR generation remain outside this iteration.
+
+## Auth0 environment setup
+
+Frontend variables belong in `frontend/.env.local`; ASP.NET Core variables must be exported in the
+shell or configured with User Secrets. `.env.example` files are templates and are not loaded by
+Vite or ASP.NET Core automatically.
+
+Create `frontend/.env.local` with the Auth0 application domain, SPA client ID, and API audience.
+The domain must contain no scheme or trailing path:
+
+```dotenv
+VITE_AUTH0_DOMAIN=example.auth0.com
+VITE_AUTH0_CLIENT_ID=your-spa-client-id
+VITE_AUTH0_AUDIENCE=https://qr-waiter-api
+```
+
+Restart Vite after changing `.env.local`. Configure the same audience and the Auth0 API domain in
+the backend, then grant the `create:sessions` permission to waiter users:
+
+```bash
+dotnet user-secrets set "Auth0:Domain" "example.auth0.com" --project backend/backend.csproj
+dotnet user-secrets set "Auth0:Audience" "https://qr-waiter-api" --project backend/backend.csproj
+```
+
+## Auth0 and table sessions
+
+Waiter session creation is protected by Auth0 bearer tokens. Configure `Auth0:Domain` and
+`Auth0:Audience` for ASP.NET Core, and the matching `VITE_AUTH0_*` values for Vite. The Auth0
+API must grant the `create:sessions` permission to waiter tokens.
+
+`POST /api/table-sessions` accepts `{ "tableId": 1 }`. A session has one stable GUID. Repeating
+the request returns the same authenticated waiter's active session; the QR can be rendered or
+printed again without changing the GUID. A request for a table owned by another active waiter
+returns `409 Conflict`. Expired sessions become new sessions only after the table's previous
+session expires.
+
+The frontend uses `qrcode.react` to render that GUID as `/session/{guid}` at the current origin.
+QR images and links are derived presentation data; they are not stored by the backend.

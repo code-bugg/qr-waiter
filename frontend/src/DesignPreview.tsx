@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
 import {
   ArrowLeft,
   BellRing,
@@ -26,6 +27,9 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { SessionQrCode } from '@/components/SessionQrCode';
+import { createTableSession } from '@/lib/table-session';
+import { isAuth0Configured } from '@/lib/auth0-config';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -206,18 +210,41 @@ function UrgencyBadge({ minutes, t }: { minutes: number; t: typeof copy[Lang] })
 
 function WaiterApp({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
   const t = copy[lang];
+  const { getAccessTokenSilently } = useAuth0();
   const [tab, setTab] = useState<'order' | 'requests'>('order');
   const [table, setTable] = useState(4);
   const [cart, setCart] = useState<Cart>({});
   const [search, setSearch] = useState('');
   const [sent, setSent] = useState(false);
+  const [sessionGuid, setSessionGuid] = useState<string>();
+  const [sessionError, setSessionError] = useState('');
   const [requests, setRequests] = useState(initialRequests.filter((r) => [2,4,6,8].includes(r.table)));
   const filtered = menuItems.filter((item) => `${item.name[lang]} ${item.description[lang]}`.toLowerCase().includes(search.toLowerCase()));
   const qty = Object.values(cart).reduce((a,b) => a+b,0);
   const total = menuItems.reduce((sum,item) => sum + (cart[item.id]||0)*item.price,0);
   return <div className="mx-auto w-full max-w-md overflow-hidden rounded-[2rem] border border-border bg-card shadow-[0_24px_70px_rgba(21,77,52,.14)] sm:min-h-[760px]">
     <header className="border-b border-border bg-white px-4 py-3"><div className="flex items-center justify-between"><Brand /><LanguageSelect lang={lang} setLang={setLang} /></div><div className="mt-3 grid grid-cols-2 rounded-xl bg-muted p-1"><button onClick={() => setTab('order')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${tab==='order'?'bg-white text-primary shadow-sm':'text-muted-foreground'}`}><Plus className="size-4" />{t.newOrder}</button><button onClick={() => setTab('requests')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${tab==='requests'?'bg-white text-primary shadow-sm':'text-muted-foreground'}`}><BellRing className="size-4" />{t.requests}<span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] text-white">{requests.length}</span></button></div></header>
-    {tab === 'order' && <div className="px-4 py-5"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.newOrder}</p><h1 className="mt-1 text-2xl font-semibold">{t.chooseTable}</h1></div><NativeSelect value={table} onChange={(e)=>setTable(Number(e.target.value))} className="w-28"><NativeSelectOption value="2">#2</NativeSelectOption><NativeSelectOption value="4">#4</NativeSelectOption><NativeSelectOption value="6">#6</NativeSelectOption><NativeSelectOption value="8">#8</NativeSelectOption></NativeSelect></div><p className="mt-3 rounded-xl bg-primary-light/65 p-3 text-xs leading-5 text-primary"><ShieldCheck className="mr-1.5 inline size-4" />{t.noNames}</p><div className="relative mt-4"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder={t.search} className="h-11 pl-9" /></div><div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">{filtered.map((item)=><div key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-white p-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.name[lang]}</p><p className="text-xs text-muted-foreground">{money(item.price)}</p></div><Quantity value={cart[item.id]||0} onChange={(next)=>setCart((c)=>({...c,[item.id]:next}))} /></div>)}</div>{qty>0 && <div className="mt-5 rounded-2xl border border-primary/15 bg-primary-light/45 p-4"><div className="flex justify-between"><div><p className="font-semibold">{t.selected}</p><p className="text-xs text-muted-foreground">{qty} {t.items} · {t.table} #{table}</p></div><span className="font-bold">{money(total)}</span></div>{sent?<div className="mt-3 flex items-center gap-2 rounded-xl bg-white p-3 text-sm font-semibold text-primary"><Check className="size-4" />{t.sent}</div>:<Button className="mt-4 w-full" onClick={()=>setSent(true)}><Check />{t.sendOrder}</Button>}</div>}</div>}
+    {tab === 'order' && <div className="px-4 py-5"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.newOrder}</p><h1 className="mt-1 text-2xl font-semibold">{t.chooseTable}</h1></div><NativeSelect value={table} onChange={(e)=>{ setTable(Number(e.target.value)); setSessionGuid(undefined); }} className="w-28"><NativeSelectOption value="2">#2</NativeSelectOption><NativeSelectOption value="4">#4</NativeSelectOption><NativeSelectOption value="6">#6</NativeSelectOption><NativeSelectOption value="8">#8</NativeSelectOption></NativeSelect></div>
+      <Button
+        variant="outline"
+        className="mt-3 w-full"
+        onClick={async () => {
+          setSessionError('');
+          try {
+            const token = await getAccessTokenSilently({ authorizationParams: { audience: import.meta.env.VITE_AUTH0_AUDIENCE } });
+            if (!token) throw new Error('Auth0 did not return an access token.');
+            const session = await createTableSession(table, token);
+            setSessionGuid(session.sessionGuid);
+          } catch {
+            setSessionError('Unable to create or retrieve the table session.');
+          }
+        }}
+      >
+        Create or open table QR
+      </Button>
+      {sessionError && <p className="mt-2 text-sm text-red-700">{sessionError}</p>}
+      {sessionGuid && <div className="mt-4 rounded-2xl border border-border bg-white p-4"><SessionQrCode sessionGuid={sessionGuid} /></div>}
+      <p className="mt-3 rounded-xl bg-primary-light/65 p-3 text-xs leading-5 text-primary"><ShieldCheck className="mr-1.5 inline size-4" />{t.noNames}</p><div className="relative mt-4"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder={t.search} className="h-11 pl-9" /></div><div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">{filtered.map((item)=><div key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-white p-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.name[lang]}</p><p className="text-xs text-muted-foreground">{money(item.price)}</p></div><Quantity value={cart[item.id]||0} onChange={(next)=>setCart((c)=>({...c,[item.id]:next}))} /></div>)}</div>{qty>0 && <div className="mt-5 rounded-2xl border border-primary/15 bg-primary-light/45 p-4"><div className="flex justify-between"><div><p className="font-semibold">{t.selected}</p><p className="text-xs text-muted-foreground">{qty} {t.items} · {t.table} #{table}</p></div><span className="font-bold">{money(total)}</span></div>{sent?<div className="mt-3 flex items-center gap-2 rounded-xl bg-white p-3 text-sm font-semibold text-primary"><Check className="size-4" />{t.sent}</div>:<Button className="mt-4 w-full" onClick={()=>setSent(true)}><Check />{t.sendOrder}</Button>}</div>}</div>}
     {tab === 'requests' && <div className="px-4 py-5"><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.requests}</p><h1 className="mt-1 text-2xl font-semibold">{t.activeRequests}</h1><p className="mt-2 text-sm text-muted-foreground">{t.tables}: 2, 4, 6, 8</p><div className="mt-5 grid gap-3">{requests.length===0?<SuccessNotice title={t.noRequests} text="" />:requests.map((request)=><article key={request.id} className="rounded-2xl border border-border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t.table} #{request.table}</p><h2 className="mt-1 font-semibold">{request.request[lang]}</h2></div><UrgencyBadge minutes={request.minutes} t={t} /></div><div className="mt-4 grid grid-cols-2 gap-2"><Button variant="outline" onClick={()=>setRequests((rs)=>rs.map((r)=>r.id===request.id?{...r,status:'seen'}:r))} disabled={request.status==='seen'}><Clock3 />{t.acknowledge}</Button><Button onClick={()=>setRequests((rs)=>rs.filter((r)=>r.id!==request.id))}><Check />{t.complete}</Button></div></article>)}</div></div>}
   </div>;
 }
@@ -251,7 +278,11 @@ function Detail({label,value}:{label:string;value:string}) { return <div classNa
 function SimpleSection({eyebrow,title,children}:{eyebrow:string;title:string;children:React.ReactNode}) { return <><p className="text-xs font-semibold uppercase tracking-wider text-accent">{eyebrow}</p><h2 className="mt-1 mb-6 text-2xl font-semibold">{title}</h2>{children}</>; }
 
 export default function Home() {
-  const [role, setRole] = useState<Role>('customer');
+  const [role, setRole] = useState<Role>(() =>
+    window.sessionStorage.getItem('qr-waiter-selected-role') === 'waiter'
+      ? 'waiter'
+      : 'customer',
+  );
   const [lang, setLang] = useState<Lang>('ro');
   const t = copy[lang];
   useEffect(() => { document.documentElement.lang = lang; document.title = 'TableBell'; }, [lang]);
@@ -259,7 +290,48 @@ export default function Home() {
   return <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(215,233,155,.32),transparent_28%),linear-gradient(#fafcfa,#f4f8f5)] px-3 py-5 text-foreground sm:px-6 sm:py-8">
     <div className={`mx-auto mb-5 grid rounded-2xl border border-border bg-white p-1.5 shadow-sm ${role==='admin'?'max-w-xl':'max-w-md'} grid-cols-3`}>{roles.map(({id,icon:Icon},index)=><Button key={id} onClick={()=>setRole(id)} variant={role===id?'default':'ghost'} className="rounded-xl"><Icon />{t.roles[index]}</Button>)}</div>
     {role==='customer'&&<CustomerApp lang={lang} setLang={setLang} />}
-    {role==='waiter'&&<WaiterApp lang={lang} setLang={setLang} />}
+    {role==='waiter'&&<AuthenticatedWaiterApp lang={lang} setLang={setLang} />}
     {role==='admin'&&<AdminApp lang={lang} setLang={setLang} />}
   </main>;
+}
+
+function AuthenticatedWaiterApp({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
+  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
+  const [signInError, setSignInError] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  if (isLoading) return <p className="text-center text-sm text-muted-foreground">Loading authentication…</p>;
+  if (!isAuthenticated) {
+    return (
+      <div className="mx-auto max-w-md rounded-2xl border bg-white p-6 text-center">
+        <h1 className="text-xl font-semibold">Waiter sign in</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Sign in with Auth0 to access waiter actions.</p>
+        {!isAuth0Configured && (
+          <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+            Auth0 is not configured. Add the VITE_AUTH0_* values to frontend/.env.local.
+          </p>
+        )}
+        {signInError && <p role="alert" className="mt-3 text-sm text-red-700">{signInError}</p>}
+        <Button
+          className="mt-5 w-full"
+          disabled={isSigningIn || !isAuth0Configured}
+          onClick={async () => {
+            setSignInError('');
+            setIsSigningIn(true);
+            window.sessionStorage.setItem('qr-waiter-selected-role', 'waiter');
+            try {
+              await loginWithRedirect({
+                appState: { returnTo: window.location.pathname },
+              });
+            } catch {
+              setSignInError('Unable to open Auth0 sign in. Check the Auth0 frontend configuration.');
+              setIsSigningIn(false);
+            }
+          }}
+        >
+          {isSigningIn ? 'Opening sign in…' : 'Sign in'}
+        </Button>
+      </div>
+    );
+  }
+  return <WaiterApp lang={lang} setLang={setLang} />;
 }

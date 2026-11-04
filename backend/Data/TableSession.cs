@@ -10,4 +10,5 @@ public sealed class TableSession
     public long TableId { get; init; }
     public long? OrderId { get; init; }
     public long? WaiterUserId { get; init; }
+    public string? WaiterAuth0Subject { get; init; }
 }
