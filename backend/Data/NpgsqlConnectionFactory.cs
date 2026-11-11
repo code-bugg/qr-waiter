@@ -16,7 +16,16 @@ public sealed class NpgsqlConnectionFactory(IConfiguration configuration) : IDbC
         }
 
         var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        return connection;
+
+        try
+        {
+            await connection.OpenAsync(cancellationToken);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync();
+            throw;
+        }
     }
 }

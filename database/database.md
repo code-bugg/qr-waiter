@@ -92,6 +92,14 @@ Expected result:
 
 CREATE FUNCTION
 
+#### Replace the session lookup function with database-driven expiry
+
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d qrwaiter -f ".\database\004_update_table_session_get_by_guid.sql"
+
+Expected result:
+
+CREATE FUNCTION
+
 ---
 
 ## Verify the Database
