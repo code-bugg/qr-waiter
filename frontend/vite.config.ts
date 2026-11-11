@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const backendUrl = process.env.BACKEND_URL ?? env.BACKEND_URL ?? 'http://localhost:5001';
   const proxy = {
-    '/api/table-sessions/': {
+    '/api/table-sessions': {
       target: backendUrl,
       changeOrigin: true,
       timeout: 10000,

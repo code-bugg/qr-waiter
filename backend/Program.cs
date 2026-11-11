@@ -1,6 +1,9 @@
 using backend.Data;
 using backend.Health;
 using backend.Database;
+using Controllers;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,18 +14,47 @@ builder.Services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
 builder.Services.AddScoped<ITableSessionRepository, TableSessionRepository>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
+var auth0Domain = builder.Configuration["Auth0:Domain"];
+var auth0Audience = builder.Configuration["Auth0:Audience"];
+if (string.IsNullOrWhiteSpace(auth0Domain) || string.IsNullOrWhiteSpace(auth0Audience))
+{
+    throw new InvalidOperationException(
+        "Auth0:Domain and Auth0:Audience must be configured.");
+}
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = $"https://{auth0Domain.TrimEnd('/')}/";
+        options.Audience = auth0Audience;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            NameClaimType = "sub"
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Waiter", policy =>
+        policy.RequireAuthenticatedUser()
+            .RequireClaim("permissions", "create:sessions"));
+});
+
 var app = builder.Build();
 
 var connectionString = app.Configuration
     .GetConnectionString("DefaultConnection");
 
-if (string.IsNullOrWhiteSpace(connectionString))
+if (!app.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(connectionString))
 {
     throw new InvalidOperationException(
         "ConnectionStrings:DefaultConnection is not configured.");
 }
 
-DatabaseMigrator.Run(connectionString);
+if (!string.IsNullOrWhiteSpace(connectionString))
+{
+    DatabaseMigrator.Run(connectionString);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -31,32 +63,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapGet("/api/table-sessions/{guid}", async (
-    string guid,
-    ITableSessionRepository repository,
-    ILogger<Program> logger,
-    CancellationToken cancellationToken) =>
-{
-    if (!Guid.TryParse(guid, out var sessionGuid))
-    {
-        return Results.BadRequest(new { error = "The session GUID is invalid." });
-    }
-
-    try
-    {
-        var session = await repository.GetByGuidAsync(sessionGuid, cancellationToken);
-        return session is null
-            ? Results.NotFound(new { error = "Table session was not found." })
-            : Results.Ok(session);
-    }
-    catch (Exception exception)
-    {
-        logger.LogError(exception, "Unable to retrieve table session {SessionGuid}", sessionGuid);
-        return Results.Problem("The table session could not be retrieved.", statusCode: StatusCodes.Status500InternalServerError);
-    }
-})
-.WithName("GetTableSessionByGuid");
+app.MapTableSessionEndpoints();
+app.MapUserEndpoints();
 
 app.MapHealthChecks("/health");
 
