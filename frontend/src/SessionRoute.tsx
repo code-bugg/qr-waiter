@@ -3,7 +3,8 @@ import { AlertTriangle, ConciergeBell, LoaderCircle, RefreshCw } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { CustomerApp, type Lang } from './DesignPreview';
-import { getTableSession, SessionError } from '@/lib/table-session';
+import { getTableSession, isSessionActive, SessionError } from '@/lib/table-session';
+import { staffCopy } from './lib/staff-copy';
 import type { SessionErrorKind, TableSession } from '@/lib/table-session';
 
 const copy = {
@@ -21,7 +22,8 @@ const copy = {
   },
 } as const;
 
-type State = { kind: 'loading' } | { kind: 'ready'; session: TableSession } | { kind: 'error'; error: SessionErrorKind };
+type LookupErrorKind = Exclude<SessionErrorKind, 'unauthorized' | 'forbidden' | 'conflict'>;
+type State = { kind: 'loading' } | { kind: 'ready'; session: TableSession } | { kind: 'error'; error: LookupErrorKind };
 
 export function SessionRoute({ guid }: { guid: string }) {
   const [language, setLanguage] = useState<Lang>('ro');
@@ -43,14 +45,15 @@ export function SessionRoute({ guid }: { guid: string }) {
       .then((session) => { if (mounted) setState({ kind: 'ready', session }); })
       .catch((error: unknown) => {
         if (mounted) {
-          setState({ kind: 'error', error: error instanceof SessionError ? error.kind : 'connection' });
+          const kind = error instanceof SessionError && error.kind in copy.ro ? error.kind as LookupErrorKind : 'connection';
+          setState({ kind: 'error', error: kind });
         }
       })
       .finally(() => window.clearTimeout(timeout));
     return () => { mounted = false; window.clearTimeout(timeout); controller.abort(); };
   }, [guid, attempt]);
 
-  if (state.kind === 'ready') {
+  if (state.kind === 'ready' && isSessionActive(state.session)) {
     return <main className="session-customer-shell"><CustomerApp key={state.session.sessionGuid} lang={language} setLang={setLanguage} table={state.session.tableId} session={state.session} /></main>;
   }
 
@@ -61,6 +64,7 @@ export function SessionRoute({ guid }: { guid: string }) {
         <NativeSelect value={language} onChange={(event) => setLanguage(event.target.value as Lang)} aria-label={t.language} className="session-language"><NativeSelectOption value="ro">RO</NativeSelectOption><NativeSelectOption value="ru">RU</NativeSelectOption><NativeSelectOption value="en">EN</NativeSelectOption></NativeSelect>
       </header>
       <article className="session-card" aria-busy={state.kind === 'loading'}>
+        {state.kind === 'ready' && <div className="session-error" role="status"><h1>{staffCopy[language].inactive}</h1><p>{staffCopy[language].inactiveText}</p></div>}
         {state.kind === 'loading' && <div className="session-loading"><output className="session-loading-message"><LoaderCircle className="motion-safe:animate-spin" aria-hidden="true" /><h1>{t.loading}</h1></output><div className="session-placeholder motion-safe:animate-pulse" aria-hidden="true" /><div className="session-placeholder session-placeholder-small motion-safe:animate-pulse" aria-hidden="true" /></div>}
         {state.kind === 'error' && <div className="session-error" role="alert"><span className="session-error-icon"><AlertTriangle size={28} aria-hidden="true" /></span><h1>{t[state.error]}</h1><p>{t[`${state.error}Text` as keyof typeof t] as string}</p>{state.error !== 'invalid' && <Button onClick={() => setAttempt((value) => value + 1)} className="session-button"><RefreshCw aria-hidden="true" />{t.retry}</Button>}</div>}
       </article>

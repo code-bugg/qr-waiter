@@ -1,0 +1,43 @@
+import type { Lang } from '../DesignPreview';
+
+export const staffCopy = {
+  ro: {
+    signIn: 'Autentificare', signOut: 'Ieșire', opening: 'Se deschide…', loading: 'Se verifică accesul…', retry: 'Încearcă din nou',
+    waiter: 'Spațiul ospătarului', admin: 'Administrare', intro: 'Autentifică-te pentru a accesa mesele restaurantului.',
+    guest: 'Ești client? Scanează codul QR primit de la ospătar pentru a deschide masa ta.',
+    setup: 'Autentificarea nu este disponibilă momentan. Contactează administratorul restaurantului.',
+    authError: 'Autentificarea nu a reușit. Încearcă din nou.', accessError: 'Accesul nu a putut fi verificat. Încearcă din nou.',
+    forbidden: 'Contul tău nu are permisiunea de a gestiona sesiunile meselor.',
+    adminPending: 'Accesul administratorilor nu este disponibil încă.',
+    qr: 'Creează sau deschide QR-ul mesei', creating: 'Se deschide sesiunea…', qrHelp: 'Scanează codul pentru a deschide această masă.',
+    unauthorized: 'Sesiunea de autentificare nu este validă. Ieși din cont și autentifică-te din nou.',
+    conflict: 'Această masă are deja o sesiune activă gestionată de alt ospătar.',
+    invalid: 'Alege un număr valid de masă.', server: 'Serviciul nu este disponibil momentan.',
+    connection: 'Verifică conexiunea și încearcă din nou.', response: 'Sesiunea mesei nu a putut fi deschisă.',
+    inactive: 'Această sesiune este inactivă.', inactiveText: 'Solicită ospătarului un cod QR pentru o sesiune activă.',
+    active: 'Activă', inactiveLabel: 'Inactivă',
+  },
+  ru: {
+    signIn: 'Войти', signOut: 'Выйти', opening: 'Открываем…', loading: 'Проверяем доступ…', retry: 'Повторить',
+    waiter: 'Кабинет официанта', admin: 'Администрирование', intro: 'Войдите для работы со столами ресторана.',
+    guest: 'Вы гость? Отсканируйте QR-код, полученный от официанта, чтобы открыть свой стол.',
+    setup: 'Вход временно недоступен. Обратитесь к администратору ресторана.',
+    authError: 'Не удалось войти. Попробуйте снова.', accessError: 'Не удалось проверить доступ. Попробуйте снова.',
+    forbidden: 'У вашей учётной записи нет разрешения управлять сессиями столов.', adminPending: 'Доступ для администраторов пока недоступен.',
+    qr: 'Создать или открыть QR-код стола', creating: 'Открываем сессию…', qrHelp: 'Отсканируйте код, чтобы открыть этот стол.',
+    unauthorized: 'Сессия входа недействительна. Выйдите и войдите снова.', conflict: 'У этого стола уже есть активная сессия другого официанта.',
+    invalid: 'Выберите действительный номер стола.', server: 'Сервис временно недоступен.', connection: 'Проверьте подключение и попробуйте снова.', response: 'Не удалось открыть сессию стола.',
+    inactive: 'Эта сессия неактивна.', inactiveText: 'Попросите официанта предоставить QR-код активной сессии.', active: 'Активна', inactiveLabel: 'Неактивна',
+  },
+  en: {
+    signIn: 'Sign in', signOut: 'Sign out', opening: 'Opening…', loading: 'Checking access…', retry: 'Try again',
+    waiter: 'Waiter workspace', admin: 'Administration', intro: 'Sign in to manage your restaurant tables.',
+    guest: 'Dining with us? Scan the QR code from your waiter to open your table.', setup: 'Sign-in is currently unavailable. Contact the restaurant administrator.',
+    authError: 'Sign-in failed. Please try again.', accessError: 'Unable to check your access. Please try again.',
+    forbidden: 'Your account does not have permission to manage table sessions.', adminPending: 'Administrator access is not available yet.',
+    qr: 'Create or open table QR', creating: 'Opening session…', qrHelp: 'Scan the code to open this table.',
+    unauthorized: 'Your sign-in session is invalid. Sign out and sign in again.', conflict: 'This table already has an active session managed by another waiter.',
+    invalid: 'Choose a valid table number.', server: 'The service is temporarily unavailable.', connection: 'Check your connection and try again.', response: 'Unable to open the table session.',
+    inactive: 'This session is inactive.', inactiveText: 'Ask your waiter for a QR code for an active session.', active: 'Active', inactiveLabel: 'Inactive',
+  },
+} satisfies Record<Lang, Record<string, string>>;
