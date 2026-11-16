@@ -1,8 +1,8 @@
 # UI Table session contract - first iteration
 
-Only session lookup is integrated. No session creation, orders, payments, waiter requests, accounts or QR generation is implemented by this UI.
+Session lookup and authenticated waiter session creation are integrated. Orders, payments and waiter requests remain outside this iteration.
 
-Browser route: `/session/{guid}`. The GUID in the link simulates scanning a QR code. The frontend requests `GET /api/table-sessions/{guid}` on its own origin; the local Vite proxy forwards it to the ASP.NET Core origin configured with `BACKEND_URL`. Neither database credentials nor direct database connections are used in the browser.
+Browser route: `/session/{guid}`. The GUID in the link represents a scanned QR code. The frontend requests `GET /api/table-sessions/{guid}` on its own origin; the local Vite proxy forwards it to the ASP.NET Core origin configured with `BACKEND_URL`. Waiters with the Auth0 `create:sessions` permission create or reopen sessions with `POST /api/table-sessions`; the frontend renders the resulting customer URL as a QR code. Neither database credentials nor direct database connections are used in the browser.
 
 ## Response
 
@@ -21,8 +21,6 @@ HTTP 200, JSON with camelCase keys:
 }
 ```
 
-This is the real seeded response, including its known stale Active status. See `backend-handoff.md`; it is not a valid current-active fixture.
-
 | Field | PostgreSQL | API / TypeScript |
 | --- | --- | --- |
 | tableSessionId | bigint | number, required |
@@ -38,6 +36,20 @@ The session link opens the existing customer home, keeping the GUID in the URL s
 
 The database owns session status and expiration. The UI must not silently change Active to Expired, hide expired/closed records, or derive order details from an order ID. Language selection (RO/RU/EN) translates labels only.
 
+## Authenticated creation and QR sharing
+
+`POST /api/table-sessions` requires an Auth0 bearer token with the `create:sessions`
+permission and accepts:
+
+```json
+{ "tableId": 4 }
+```
+
+The backend creates a session or returns the same waiter's active session for that table. An
+active session owned by another waiter returns HTTP 409. The session GUID remains stable when
+the session is reopened. The frontend encodes the current origin and `/session/{guid}` in a
+QR code; QR images and links are presentation data and are not stored by the backend.
+
 ## Errors and request lifecycle
 
 - Loading state while fetching; requests time out after 10 seconds.
@@ -47,6 +59,7 @@ The database owns session status and expiration. The UI must not silently change
 - Backend 500 or proxy 5xx: service-error state, retry available.
 - Network failure / timeout: connection-error state, retry available.
 - Invalid JSON, missing fields, unknown status or mismatched GUID: response-error state, retry available.
+- Session creation requires Auth0; 400, 401, 403, 409 and 5xx responses show the corresponding staff error state.
 - Navigation/unmount cancels the in-flight request; obsolete responses cannot replace current content.
 - Reload requests fresh data. No automatic polling, local data fallback or health-check preflight.
 
@@ -56,10 +69,10 @@ Start both layers following the root README. Open these routes on `http://localh
 
 | Route suffix | Expected |
 | --- | --- |
-| /session/550e8400-e29b-41d4-a716-446655440001 | Real table 1 record; currently returns stale Active |
+| /session/550e8400-e29b-41d4-a716-446655440001 | Known table 1 record |
 | /session/550e8400-e29b-41d4-a716-446655440002 | Expired session |
 | /session/550e8400-e29b-41d4-a716-446655440003 | Closed session, order 42 |
 | /session/00000000-0000-0000-0000-000000000000 | Not found |
 | /session/not-a-guid | Invalid link |
 
-Use controlled fixtures to verify currently-active and cancelled records. Test backend-unavailable behavior by stopping only your own backend or pointing a separate frontend test instance at an unused port, then retry after recovery. The root `/` retains the design mockups without preview labels; those interactions still use demonstration data. The error page does not automatically redirect to this root or a fallback table.
+Sign in at `/staff` with a waiter account that has the `create:sessions` permission, open `/waiter`, and create or reopen a session for table 2, 4, 6 or 8. Verify that the returned GUID is stable when reopening the same active session, that the QR and Open link use `/session/{guid}`, and that a second waiter receives an ownership conflict for that table. Use controlled fixtures to verify active, expired, closed and cancelled records. Test backend-unavailable behavior by stopping only your own backend or pointing a separate frontend test instance at an unused port, then retry after recovery. The root `/` retains customer QR guidance; orders and requests still use demonstration data. The error page does not automatically redirect to this root or a fallback table.
