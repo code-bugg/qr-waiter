@@ -27,6 +27,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         options.Authority = $"https://{auth0Domain.TrimEnd('/')}/";
         options.Audience = auth0Audience;
+        // Endpoints read Auth0's original "sub" claim to identify the waiter.
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             NameClaimType = "sub"
