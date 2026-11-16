@@ -1,6 +1,6 @@
 # QR Waiter — first session iteration
 
-An anonymous customer opens `/session/{guid}` and lands on the TableBell customer home. Its table number and session summary come from ASP.NET Core and PostgreSQL. Invalid links and lookup failures show an error page. The design mockups remain available at the frontend root; menu, orders, waiter requests and payment interactions still use demonstration data, without preview banners in the UI.
+An anonymous customer opens `/session/{guid}` and lands on the TableBell customer home. Its table number and session summary come from ASP.NET Core and PostgreSQL. Invalid links and lookup failures show an error page. The root is customer-only QR guidance; `/staff` is the separate staff entry. `/waiter` uses Auth0 and API-confirmed permissions; `/admin` awaits backend authorization support. Menu, orders, waiter requests and payment interactions still use demonstration data. See [the Auth0 frontend review](docs/auth0-frontend-review.md) for completed work and remaining requirements.
 
 ## Repository
 
@@ -80,10 +80,10 @@ npm test
 npm run build
 ```
 
-- [API contract and manual scenarios](docs/table-session-api.md)
-- [Backend fixes to hand off](docs/backend-handoff.md)
+- [API contract and manual scenarios](docs/UI-table-session-iteration-1.md)
+- [Backend fixes to hand off](docs/backend-issues-iteration-1.md)
 
-The database now resolves session expiry on the server side, and the health endpoint verifies a real PostgreSQL round trip before returning healthy. Cloud deployment, HTTPS setup, accounts, session writes, orders and real QR generation remain outside this iteration.
+The database now resolves session expiry on the server side, and the health endpoint verifies a real PostgreSQL round trip before returning healthy. Auth0 waiter sign-in, authenticated session creation/reopening and QR generation are implemented. Cloud deployment, persisted orders/requests, admin authorization and closing a visit after confirmed payment remain pending.
 
 ## Auth0 environment setup
 
@@ -112,7 +112,7 @@ dotnet user-secrets set "Auth0:Audience" "https://qr-waiter-api" --project backe
 
 Waiter session creation is protected by Auth0 bearer tokens. Configure `Auth0:Domain` and
 `Auth0:Audience` for ASP.NET Core, and the matching `VITE_AUTH0_*` values for Vite. The Auth0
-API must grant the `create:sessions` permission to waiter tokens.
+API must grant the `create:sessions` permission to waiter tokens. Enable RBAC and Add Permissions in the Access Token on that API. Allow `http://localhost:5173` in the SPA application’s callback URLs, logout URLs and web origins; production origins need equivalent settings.
 
 `POST /api/table-sessions` accepts `{ "tableId": 1 }`. A session has one stable GUID. Repeating
 the request returns the same authenticated waiter's active session; the QR can be rendered or

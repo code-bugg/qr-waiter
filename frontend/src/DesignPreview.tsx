@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth0 } from '@auth0/auth0-react';
 import {
   ArrowLeft,
   BellRing,
@@ -16,6 +15,7 @@ import {
   Minus,
   Plus,
   ReceiptText,
+  QrCode,
   Search,
   Settings2,
   ShieldCheck,
@@ -27,9 +27,10 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { SessionQrCode } from '@/components/SessionQrCode';
-import { createTableSession } from '@/lib/table-session';
-import { isAuth0Configured } from '@/lib/auth0-config';
+import { TableSessions } from './TableSessions';
+import { sessionCopy } from '@/lib/session-copy';
+import { isSessionActive } from '@/lib/table-session';
+import { staffCopy } from '@/lib/staff-copy';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -47,7 +48,6 @@ import {
 } from '@/components/ui/native-select';
 import type { SessionStatus, TableSession } from '@/lib/table-session';
 
-type Role = 'customer' | 'waiter' | 'admin';
 export type Lang = 'ro' | 'ru' | 'en';
 type Item = { id: number; name: Record<Lang, string>; description: Record<Lang, string>; price: number; category: string };
 type Cart = Record<number, number>;
@@ -99,7 +99,7 @@ const menuItems: Item[] = [
 
 const money = (value: number) => `${value.toFixed(0)} MDL`;
 
-function LanguageSelect({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
+export function LanguageSelect({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
   return (
     <NativeSelect size="sm" value={lang} onChange={(event) => setLang(event.target.value as Lang)} aria-label="Language">
       <NativeSelectOption value="ro">RO</NativeSelectOption>
@@ -113,16 +113,14 @@ function Brand() {
   return <div className="flex items-center gap-2.5 font-semibold tracking-tight"><span className="grid size-10 place-items-center rounded-xl bg-accent text-white"><ConciergeBell className="size-5" /></span><span>TableBell</span></div>;
 }
 
-const sessionStatusCopy: Record<Lang, Record<SessionStatus, string>> = {
-  ro: { Active: 'Activă', Expired: 'Expirată', Closed: 'Închisă', Cancelled: 'Anulată' },
-  ru: { Active: 'Активна', Expired: 'Истекла', Closed: 'Закрыта', Cancelled: 'Отменена' },
-  en: { Active: 'Active', Expired: 'Expired', Closed: 'Closed', Cancelled: 'Cancelled' },
-};
+function sessionStatusLabel(status: SessionStatus, lang: Lang) {
+  return status === 'Active' ? staffCopy[lang].active : staffCopy[lang].inactiveLabel;
+}
 
 function MobileHeader({ lang, setLang, onBack, table = 8, status, backLabel }: { lang: Lang; setLang: (lang: Lang) => void; onBack?: () => void; table?: number; status?: SessionStatus; backLabel: string }) {
   return <header className="flex min-h-16 items-center justify-between gap-2 border-b border-border bg-white px-4 py-3">
     {onBack ? <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft />{backLabel}</Button> : <Brand />}
-    <div className="flex items-center gap-2"><span className="rounded-full bg-highlight px-2.5 py-1.5 text-xs font-semibold text-[#29411f]">#{table}</span>{status && <span className={`hidden rounded-full px-2.5 py-1.5 text-xs font-semibold sm:inline-flex session-status-${status.toLowerCase()}`}>{sessionStatusCopy[lang][status]}</span>}<LanguageSelect lang={lang} setLang={setLang} /></div>
+    <div className="flex items-center gap-2"><span className="rounded-full bg-highlight px-2.5 py-1.5 text-xs font-semibold text-[#29411f]">#{table}</span>{status && <span className={`hidden rounded-full px-2.5 py-1.5 text-xs font-semibold sm:inline-flex session-status-${status === 'Active' ? 'active' : 'inactive'}`}>{sessionStatusLabel(status, lang)}</span>}<LanguageSelect lang={lang} setLang={setLang} /></div>
   </header>;
 }
 
@@ -184,7 +182,7 @@ function SessionSummary({ session, lang }: { session: TableSession; lang: Lang }
   }[lang];
   const formatter = new Intl.DateTimeFormat({ ro: 'ro-RO', ru: 'ru-RU', en: 'en-GB' }[lang], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return <dl className="customer-session-summary">
-    <div><dt>{labels.status}</dt><dd><span className={`customer-session-status session-status-${session.sessionStatus.toLowerCase()}`}>{sessionStatusCopy[lang][session.sessionStatus]}</span></dd></div>
+    <div><dt>{labels.status}</dt><dd><span className={`customer-session-status session-status-${isSessionActive(session) ? 'active' : 'inactive'}`}>{sessionStatusLabel(session.sessionStatus, lang)}</span></dd></div>
     <div><dt>{labels.start}</dt><dd><time dateTime={session.sessionStartTime}>{formatter.format(new Date(session.sessionStartTime))}</time></dd></div>
     <div><dt>{labels.expiration}</dt><dd><time dateTime={session.sessionExpirationTime}>{formatter.format(new Date(session.sessionExpirationTime))}</time></dd></div>
     <div><dt>{labels.order}</dt><dd>{session.orderId === null ? labels.noOrder : `#${session.orderId}`}</dd></div>
@@ -196,10 +194,10 @@ function SuccessNotice({ title, text }: { title: string; text: string }) {
 }
 
 const initialRequests = [
-  { id: 1, table: 4, request: { ro: 'Apă', ru: 'Вода', en: 'Water' }, minutes: 1, waiter: 'Andrei', status: 'new' },
-  { id: 2, table: 7, request: { ro: 'Tacâmuri', ru: 'Приборы', en: 'Cutlery' }, minutes: 2, waiter: 'Elena', status: 'new' },
-  { id: 3, table: 2, request: { ro: 'Plată cu cardul', ru: 'Оплата картой', en: 'Card payment' }, minutes: 5, waiter: 'Andrei', status: 'seen' },
-  { id: 4, table: 11, request: { ro: 'Ajutor cu meniul', ru: 'Помощь с меню', en: 'Menu help' }, minutes: 8, waiter: 'Mihai', status: 'new' },
+  { id: 1, table: 4, request: { ro: 'Apă', ru: 'Вода', en: 'Water' }, minutes: 1, waiter: 'Andrei', active: true },
+  { id: 2, table: 7, request: { ro: 'Tacâmuri', ru: 'Приборы', en: 'Cutlery' }, minutes: 2, waiter: 'Elena', active: true },
+  { id: 3, table: 2, request: { ro: 'Plată cu cardul', ru: 'Оплата картой', en: 'Card payment' }, minutes: 5, waiter: 'Andrei', active: true },
+  { id: 4, table: 11, request: { ro: 'Ajutor cu meniul', ru: 'Помощь с меню', en: 'Menu help' }, minutes: 8, waiter: 'Mihai', active: true },
 ];
 
 function UrgencyBadge({ minutes, t }: { minutes: number; t: typeof copy[Lang] }) {
@@ -208,44 +206,26 @@ function UrgencyBadge({ minutes, t }: { minutes: number; t: typeof copy[Lang] })
   return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${classes}`}><Clock3 className="size-3.5" />{minutes}:00 · {t[state]}</span>;
 }
 
-function WaiterApp({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
+export function WaiterApp({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
   const t = copy[lang];
-  const { getAccessTokenSilently } = useAuth0();
-  const [tab, setTab] = useState<'order' | 'requests'>('order');
+  const [tab, setTab] = useState<'sessions' | 'order' | 'requests'>('sessions');
   const [table, setTable] = useState(4);
   const [cart, setCart] = useState<Cart>({});
   const [search, setSearch] = useState('');
   const [sent, setSent] = useState(false);
-  const [sessionGuid, setSessionGuid] = useState<string>();
-  const [sessionError, setSessionError] = useState('');
   const [requests, setRequests] = useState(initialRequests.filter((r) => [2,4,6,8].includes(r.table)));
+  const activeRequests = requests.filter((request) => request.active);
   const filtered = menuItems.filter((item) => `${item.name[lang]} ${item.description[lang]}`.toLowerCase().includes(search.toLowerCase()));
   const qty = Object.values(cart).reduce((a,b) => a+b,0);
   const total = menuItems.reduce((sum,item) => sum + (cart[item.id]||0)*item.price,0);
   return <div className="mx-auto w-full max-w-md overflow-hidden rounded-[2rem] border border-border bg-card shadow-[0_24px_70px_rgba(21,77,52,.14)] sm:min-h-[760px]">
-    <header className="border-b border-border bg-white px-4 py-3"><div className="flex items-center justify-between"><Brand /><LanguageSelect lang={lang} setLang={setLang} /></div><div className="mt-3 grid grid-cols-2 rounded-xl bg-muted p-1"><button onClick={() => setTab('order')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${tab==='order'?'bg-white text-primary shadow-sm':'text-muted-foreground'}`}><Plus className="size-4" />{t.newOrder}</button><button onClick={() => setTab('requests')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${tab==='requests'?'bg-white text-primary shadow-sm':'text-muted-foreground'}`}><BellRing className="size-4" />{t.requests}<span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] text-white">{requests.length}</span></button></div></header>
-    {tab === 'order' && <div className="px-4 py-5"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.newOrder}</p><h1 className="mt-1 text-2xl font-semibold">{t.chooseTable}</h1></div><NativeSelect value={table} onChange={(e)=>{ setTable(Number(e.target.value)); setSessionGuid(undefined); }} className="w-28"><NativeSelectOption value="2">#2</NativeSelectOption><NativeSelectOption value="4">#4</NativeSelectOption><NativeSelectOption value="6">#6</NativeSelectOption><NativeSelectOption value="8">#8</NativeSelectOption></NativeSelect></div>
-      <Button
-        variant="outline"
-        className="mt-3 w-full"
-        onClick={async () => {
-          setSessionError('');
-          try {
-            const token = await getAccessTokenSilently({ authorizationParams: { audience: import.meta.env.VITE_AUTH0_AUDIENCE } });
-            if (!token) throw new Error('Auth0 did not return an access token.');
-            const session = await createTableSession(table, token);
-            setSessionGuid(session.sessionGuid);
-          } catch {
-            setSessionError('Unable to create or retrieve the table session.');
-          }
-        }}
-      >
-        Create or open table QR
-      </Button>
-      {sessionError && <p className="mt-2 text-sm text-red-700">{sessionError}</p>}
-      {sessionGuid && <div className="mt-4 rounded-2xl border border-border bg-white p-4"><SessionQrCode sessionGuid={sessionGuid} /></div>}
+    <header className="border-b border-border bg-white px-4 py-3"><div className="flex items-center justify-between"><Brand /><LanguageSelect lang={lang} setLang={setLang} /></div><nav className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1" aria-label={staffCopy[lang].waiter}>
+      {([{id:'sessions',label:sessionCopy[lang].title,icon:QrCode},{id:'order',label:t.newOrder,icon:Plus},{id:'requests',label:t.requests,icon:BellRing}] as const).map(({id,label,icon:Icon}) => <button key={id} aria-pressed={tab===id} onClick={() => setTab(id)} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-semibold ${tab===id?'bg-white text-primary shadow-sm':'text-muted-foreground'}`}><span className="flex items-center gap-1"><Icon className="size-4" />{id==='requests' && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] text-white">{activeRequests.length}</span>}</span>{label}</button>)}
+    </nav></header>
+    <div hidden={tab !== 'sessions'}><TableSessions lang={lang} tableId={table} onTableChange={setTable} active={tab === 'sessions'} /></div>
+    {tab === 'order' && <div className="px-4 py-5"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.newOrder}</p><h1 className="mt-1 text-2xl font-semibold">{t.chooseTable}</h1></div><NativeSelect value={table} aria-label={t.chooseTable} onChange={(e)=>{ setTable(Number(e.target.value)); setSent(false); }} className="w-28"><NativeSelectOption value="2">#2</NativeSelectOption><NativeSelectOption value="4">#4</NativeSelectOption><NativeSelectOption value="6">#6</NativeSelectOption><NativeSelectOption value="8">#8</NativeSelectOption></NativeSelect></div>
       <p className="mt-3 rounded-xl bg-primary-light/65 p-3 text-xs leading-5 text-primary"><ShieldCheck className="mr-1.5 inline size-4" />{t.noNames}</p><div className="relative mt-4"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder={t.search} className="h-11 pl-9" /></div><div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">{filtered.map((item)=><div key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-white p-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.name[lang]}</p><p className="text-xs text-muted-foreground">{money(item.price)}</p></div><Quantity value={cart[item.id]||0} onChange={(next)=>setCart((c)=>({...c,[item.id]:next}))} /></div>)}</div>{qty>0 && <div className="mt-5 rounded-2xl border border-primary/15 bg-primary-light/45 p-4"><div className="flex justify-between"><div><p className="font-semibold">{t.selected}</p><p className="text-xs text-muted-foreground">{qty} {t.items} · {t.table} #{table}</p></div><span className="font-bold">{money(total)}</span></div>{sent?<div className="mt-3 flex items-center gap-2 rounded-xl bg-white p-3 text-sm font-semibold text-primary"><Check className="size-4" />{t.sent}</div>:<Button className="mt-4 w-full" onClick={()=>setSent(true)}><Check />{t.sendOrder}</Button>}</div>}</div>}
-    {tab === 'requests' && <div className="px-4 py-5"><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.requests}</p><h1 className="mt-1 text-2xl font-semibold">{t.activeRequests}</h1><p className="mt-2 text-sm text-muted-foreground">{t.tables}: 2, 4, 6, 8</p><div className="mt-5 grid gap-3">{requests.length===0?<SuccessNotice title={t.noRequests} text="" />:requests.map((request)=><article key={request.id} className="rounded-2xl border border-border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t.table} #{request.table}</p><h2 className="mt-1 font-semibold">{request.request[lang]}</h2></div><UrgencyBadge minutes={request.minutes} t={t} /></div><div className="mt-4 grid grid-cols-2 gap-2"><Button variant="outline" onClick={()=>setRequests((rs)=>rs.map((r)=>r.id===request.id?{...r,status:'seen'}:r))} disabled={request.status==='seen'}><Clock3 />{t.acknowledge}</Button><Button onClick={()=>setRequests((rs)=>rs.filter((r)=>r.id!==request.id))}><Check />{t.complete}</Button></div></article>)}</div></div>}
+    {tab === 'requests' && <div className="px-4 py-5"><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.requests}</p><h1 className="mt-1 text-2xl font-semibold">{t.activeRequests}</h1><p className="mt-2 text-sm text-muted-foreground">{t.tables}: 2, 4, 6, 8</p><div className="mt-5 grid gap-3">{activeRequests.length===0?<SuccessNotice title={t.noRequests} text="" />:activeRequests.map((request)=><article key={request.id} className="rounded-2xl border border-border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t.table} #{request.table}</p><h2 className="mt-1 font-semibold">{request.request[lang]}</h2></div><UrgencyBadge minutes={request.minutes} t={t} /></div><div className="mt-4"><Button className="w-full" onClick={()=>setRequests((rs)=>rs.map((r)=>r.id===request.id?{...r,active:false}:r))}><Check />{t.complete}</Button></div></article>)}</div></div>}
   </div>;
 }
 
@@ -260,7 +240,7 @@ function AdminApp({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void
     <aside className="hidden bg-primary p-5 text-white lg:flex lg:flex-col"><Brand /><p className="mt-8 text-xs font-semibold uppercase tracking-[.16em] text-white/50">{t.dashboard}</p><nav className="mt-3 grid gap-1">{nav.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setSection(id)} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold ${section===id?'bg-white text-primary':'text-white/75 hover:bg-white/10'}`}><Icon className="size-4" />{label}</button>)}</nav><div className="mt-auto rounded-2xl bg-white/10 p-4"><p className="text-sm font-semibold">Restaurant Centru</p><p className="mt-1 text-xs text-white/55">12 {t.tables.toLowerCase()} · 3 {t.waiter.toLowerCase()}</p></div></aside>
     <div className="min-w-0"><header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-6"><div className="lg:hidden"><Brand /></div><div className="hidden lg:block"><h1 className="text-xl font-semibold">{nav.find((n)=>n.id===section)?.label}</h1><p className="mt-0.5 text-xs text-muted-foreground"><span className="mr-1 inline-block size-2 rounded-full bg-[#3f9b5f]" />{t.live}</p></div><LanguageSelect lang={lang} setLang={setLang} /></header><nav className="grid grid-cols-4 border-b border-border bg-white p-2 lg:hidden">{nav.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setSection(id)} className={`flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] font-semibold ${section===id?'bg-primary-light text-primary':'text-muted-foreground'}`}><Icon className="size-4" />{label}</button>)}</nav>
       <main className="bg-background p-4 sm:p-6 lg:p-8">
-        {section==='active' && <><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.dashboard}</p><h2 className="mt-1 text-2xl font-semibold">{t.queue}</h2><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t.rowHint}</p></div><div className="flex gap-2"><Stat value="4" label={t.active} tone="green" /><Stat value="2" label={t.urgent} tone="red" /></div></div><div className="mt-6 hidden overflow-hidden rounded-2xl border border-border bg-white md:block"><table className="w-full border-collapse text-left"><thead className="bg-primary-light/55 text-xs uppercase tracking-wider text-muted-foreground"><tr><th className="p-4">{t.table}</th><th className="p-4">{t.request}</th><th className="p-4">{t.waiter}</th><th className="p-4">{t.status}</th><th className="p-4">{t.waiting}</th><th className="p-4"><span className="sr-only">{t.details}</span></th></tr></thead><tbody>{initialRequests.map((r)=><tr key={r.id} onClick={()=>setSelected(r)} className="cursor-pointer border-t border-border transition hover:bg-primary-light/30"><td className="p-4 font-bold">#{r.table}</td><td className="p-4 font-semibold">{r.request[lang]}</td><td className="p-4"><span className="inline-flex items-center gap-2"><span className="grid size-7 place-items-center rounded-full bg-primary-light text-xs font-bold text-primary">{r.waiter[0]}</span>{r.waiter}</span></td><td className="p-4 text-sm text-muted-foreground">{r.status==='seen'?t.seen:t.opened}</td><td className="p-4"><UrgencyBadge minutes={r.minutes} t={t} /></td><td className="p-4"><ChevronRight className="size-4 text-muted-foreground" /></td></tr>)}</tbody></table></div><div className="mt-5 grid gap-3 md:hidden">{initialRequests.map((r)=><button key={r.id} onClick={()=>setSelected(r)} className="rounded-2xl border border-border bg-white p-4 text-left"><div className="flex items-start justify-between"><span className="font-bold">{t.table} #{r.table}</span><UrgencyBadge minutes={r.minutes} t={t} /></div><p className="mt-3 font-semibold">{r.request[lang]}</p><p className="mt-2 text-xs text-muted-foreground">{t.waiter}: {r.waiter} · {r.status==='seen'?t.seen:t.opened}</p></button>)}</div></>}
+        {section==='active' && <><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-accent">{t.dashboard}</p><h2 className="mt-1 text-2xl font-semibold">{t.queue}</h2><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t.rowHint}</p></div><div className="flex gap-2"><Stat value="4" label={t.active} tone="green" /><Stat value="2" label={t.urgent} tone="red" /></div></div><div className="mt-6 hidden overflow-hidden rounded-2xl border border-border bg-white md:block"><table className="w-full border-collapse text-left"><thead className="bg-primary-light/55 text-xs uppercase tracking-wider text-muted-foreground"><tr><th className="p-4">{t.table}</th><th className="p-4">{t.request}</th><th className="p-4">{t.waiter}</th><th className="p-4">{t.status}</th><th className="p-4">{t.waiting}</th><th className="p-4"><span className="sr-only">{t.details}</span></th></tr></thead><tbody>{initialRequests.map((r)=><tr key={r.id} onClick={()=>setSelected(r)} className="cursor-pointer border-t border-border transition hover:bg-primary-light/30"><td className="p-4 font-bold">#{r.table}</td><td className="p-4 font-semibold">{r.request[lang]}</td><td className="p-4"><span className="inline-flex items-center gap-2"><span className="grid size-7 place-items-center rounded-full bg-primary-light text-xs font-bold text-primary">{r.waiter[0]}</span>{r.waiter}</span></td><td className="p-4 text-sm text-muted-foreground">{r.active ? staffCopy[lang].active : staffCopy[lang].inactiveLabel}</td><td className="p-4"><UrgencyBadge minutes={r.minutes} t={t} /></td><td className="p-4"><ChevronRight className="size-4 text-muted-foreground" /></td></tr>)}</tbody></table></div><div className="mt-5 grid gap-3 md:hidden">{initialRequests.map((r)=><button key={r.id} onClick={()=>setSelected(r)} className="rounded-2xl border border-border bg-white p-4 text-left"><div className="flex items-start justify-between"><span className="font-bold">{t.table} #{r.table}</span><UrgencyBadge minutes={r.minutes} t={t} /></div><p className="mt-3 font-semibold">{r.request[lang]}</p><p className="mt-2 text-xs text-muted-foreground">{t.waiter}: {r.waiter} · {r.active ? staffCopy[lang].active : staffCopy[lang].inactiveLabel}</p></button>)}</div></>}
         {section==='coverage' && <SimpleSection eyebrow={t.automatic} title={t.coverage}><div className="grid gap-4 md:grid-cols-3">{[{name:'Andrei',tables:'1, 2, 3, 4'},{name:'Elena',tables:'5, 6, 7, 8'},{name:'Mihai',tables:'9, 10, 11, 12'}].map((w)=><article key={w.name} className="rounded-2xl border border-border bg-white p-5"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-full bg-primary text-lg font-bold text-white">{w.name[0]}</span><div><h3 className="font-semibold">{w.name}</h3><p className="text-xs text-[#23733d]">● {t.onShift}</p></div></div><p className="mt-5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t.tables}</p><p className="mt-1 text-lg font-semibold">{w.tables}</p></article>)}</div></SimpleSection>}
         {section==='menu' && <SimpleSection eyebrow={t.translations} title={t.menuAdmin}><div className="overflow-hidden rounded-2xl border border-border bg-white">{menuItems.map((item)=><div key={item.id} className="flex items-center justify-between gap-4 border-b border-border p-4 last:border-0"><div><p className="font-semibold">{item.name[lang]}</p><p className="mt-1 text-xs text-muted-foreground">{item.description[lang]}</p></div><span className="rounded-lg bg-highlight px-3 py-1.5 text-sm font-bold text-primary">{money(item.price)}</span></div>)}</div></SimpleSection>}
         {section==='history' && <SimpleSection eyebrow="30 zile" title={t.history}><div className="grid gap-4 sm:grid-cols-3"><Stat value="486" label={t.requests} tone="green" /><Stat value="1:42" label={t.waiting} tone="orange" /><Stat value="94%" label={t.normal} tone="green" /></div><div className="mt-5 rounded-2xl border border-border bg-white p-6 text-center text-sm text-muted-foreground"><History className="mx-auto mb-3 size-9 text-primary/35" />{t.history} · 12 Sep — 16 Sep</div></SimpleSection>}
@@ -278,60 +258,14 @@ function Detail({label,value}:{label:string;value:string}) { return <div classNa
 function SimpleSection({eyebrow,title,children}:{eyebrow:string;title:string;children:React.ReactNode}) { return <><p className="text-xs font-semibold uppercase tracking-wider text-accent">{eyebrow}</p><h2 className="mt-1 mb-6 text-2xl font-semibold">{title}</h2>{children}</>; }
 
 export default function Home() {
-  const [role, setRole] = useState<Role>(() =>
-    window.sessionStorage.getItem('qr-waiter-selected-role') === 'waiter'
-      ? 'waiter'
-      : 'customer',
-  );
   const [lang, setLang] = useState<Lang>('ro');
-  const t = copy[lang];
+  const t = staffCopy[lang];
   useEffect(() => { document.documentElement.lang = lang; document.title = 'TableBell'; }, [lang]);
-  const roles: { id: Role; icon: typeof UserRound }[] = [{id:'customer',icon:UserRound},{id:'waiter',icon:ConciergeBell},{id:'admin',icon:Settings2}];
-  return <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(215,233,155,.32),transparent_28%),linear-gradient(#fafcfa,#f4f8f5)] px-3 py-5 text-foreground sm:px-6 sm:py-8">
-    <div className={`mx-auto mb-5 grid rounded-2xl border border-border bg-white p-1.5 shadow-sm ${role==='admin'?'max-w-xl':'max-w-md'} grid-cols-3`}>{roles.map(({id,icon:Icon},index)=><Button key={id} onClick={()=>setRole(id)} variant={role===id?'default':'ghost'} className="rounded-xl"><Icon />{t.roles[index]}</Button>)}</div>
-    {role==='customer'&&<CustomerApp lang={lang} setLang={setLang} />}
-    {role==='waiter'&&<AuthenticatedWaiterApp lang={lang} setLang={setLang} />}
-    {role==='admin'&&<AdminApp lang={lang} setLang={setLang} />}
+  return <main className="min-h-screen bg-muted/35 px-4 py-8">
+    <section className="mx-auto max-w-md rounded-2xl border border-border bg-white p-6">
+      <header className="flex items-center justify-between gap-3"><Brand /><LanguageSelect lang={lang} setLang={setLang} /></header>
+      <h1 className="mt-6 text-2xl font-semibold">{{ ro: 'Scanează codul mesei', ru: 'Отсканируйте QR-код стола', en: 'Scan your table’s QR code' }[lang]}</h1>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.guest}</p>
+    </section>
   </main>;
-}
-
-function AuthenticatedWaiterApp({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
-  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
-  const [signInError, setSignInError] = useState('');
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  if (isLoading) return <p className="text-center text-sm text-muted-foreground">Loading authentication…</p>;
-  if (!isAuthenticated) {
-    return (
-      <div className="mx-auto max-w-md rounded-2xl border bg-white p-6 text-center">
-        <h1 className="text-xl font-semibold">Waiter sign in</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Sign in with Auth0 to access waiter actions.</p>
-        {!isAuth0Configured && (
-          <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-            Auth0 is not configured. Add the VITE_AUTH0_* values to frontend/.env.local.
-          </p>
-        )}
-        {signInError && <p role="alert" className="mt-3 text-sm text-red-700">{signInError}</p>}
-        <Button
-          className="mt-5 w-full"
-          disabled={isSigningIn || !isAuth0Configured}
-          onClick={async () => {
-            setSignInError('');
-            setIsSigningIn(true);
-            window.sessionStorage.setItem('qr-waiter-selected-role', 'waiter');
-            try {
-              await loginWithRedirect({
-                appState: { returnTo: window.location.pathname },
-              });
-            } catch {
-              setSignInError('Unable to open Auth0 sign in. Check the Auth0 frontend configuration.');
-              setIsSigningIn(false);
-            }
-          }}
-        >
-          {isSigningIn ? 'Opening sign in…' : 'Sign in'}
-        </Button>
-      </div>
-    );
-  }
-  return <WaiterApp lang={lang} setLang={setLang} />;
 }

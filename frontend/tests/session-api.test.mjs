@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getTableSession, isSessionGuid, SessionError } from '../src/lib/table-session.ts';
+import { createTableSession, getTableSession, isSessionActive, isSessionGuid, SessionError } from '../src/lib/table-session.ts';
 
 const guid = '550e8400-e29b-41d4-a716-446655440001';
 const session = {
@@ -63,4 +63,41 @@ test('a timeout during body parsing stays an abort, not a response-format error'
   await assert.rejects(getTableSession(guid, { signal: controller.signal, fetcher: async () => ({
     status: 200, ok: true, json: async () => { controller.abort(); throw controller.signal.reason; },
   }) }), { name: 'AbortError' });
+});
+
+test('maps the backend lifecycle to exactly Active and Inactive', () => {
+  assert.equal(isSessionActive(session), true);
+  for (const sessionStatus of ['Expired', 'Closed', 'Cancelled']) assert.equal(isSessionActive({ sessionStatus }), false);
+});
+test('creates or reopens a table session using the signed-in waiter token', async () => {
+  const controller = new AbortController();
+  assert.deepEqual(await createTableSession(1, 'access-token', { signal: controller.signal, fetcher: async (url, init) => {
+    assert.equal(url, '/api/table-sessions');
+    assert.equal(init.method, 'POST');
+    assert.equal(init.headers.Authorization, 'Bearer access-token');
+    assert.deepEqual(JSON.parse(init.body), { tableId: 1 });
+    assert.equal(init.signal, controller.signal);
+    return new Response(JSON.stringify(session));
+  } }), session);
+});
+test('invalid table identifiers and empty tokens make no session writes', async () => {
+  const options = { fetcher: () => assert.fail('must not fetch') };
+  for (const id of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN]) await assert.rejects(createTableSession(id, 'token', options), errorKind('invalid'));
+  await assert.rejects(createTableSession(1, '', options), errorKind('unauthorized'));
+});
+for (const [status, kind] of [[400, 'invalid'], [401, 'unauthorized'], [403, 'forbidden'], [409, 'conflict'], [500, 'server']]) {
+  test(`session creation distinguishes HTTP ${status}`, async () => {
+    await assert.rejects(createTableSession(1, 'token', { fetcher: jsonFetch({}, status) }), errorKind(kind));
+  });
+}
+test('does not display a QR for the wrong table or an inactive session', async () => {
+  for (const body of [{ ...session, tableId: 2 }, { ...session, sessionStatus: 'Closed' }]) {
+    await assert.rejects(createTableSession(1, 'token', { fetcher: jsonFetch(body) }), errorKind('response'));
+  }
+});
+test('session creation handles network failures, invalid JSON and cancellation', async () => {
+  await assert.rejects(createTableSession(1, 'token', { fetcher: async () => { throw new TypeError('offline'); } }), errorKind('connection'));
+  await assert.rejects(createTableSession(1, 'token', { fetcher: async () => new Response('<html>') }), errorKind('response'));
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(createTableSession(1, 'token', { signal: controller.signal, fetcher: async () => { throw controller.signal.reason; } }), { name: 'AbortError' });
 });

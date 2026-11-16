@@ -101,9 +101,7 @@
 .session-table-id { margin-top: 4px; font-size: 64px; font-weight: 550; line-height: 1.15; letter-spacing: -3px; overflow-wrap: anywhere; min-width: 0; }
 .session-status { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 100px; margin: 12px 0 7px auto; font-size: 14px; font-weight: 650; }
 .session-status-active { background: #d7e99b; color: #254324; }
-.session-status-expired { background: #ffebc2; color: #704600; }
-.session-status-closed { background: #e6eee9; color: #304d3c; }
-.session-status-cancelled { background: #fce0d8; color: #7b3028; }
+.session-status-inactive { background: #e6eee9; color: #304d3c; }
 .session-status svg { flex-shrink: 0; }
 .session-message { margin: 19px 0 22px; font-size: 16px; line-height: 1.6; color: #55655a; }
 .session-facts { border-top: 1px solid #e1e8e2; }

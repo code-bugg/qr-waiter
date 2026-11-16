@@ -1,6 +1,11 @@
 export const sessionStatuses = ['Active', 'Expired', 'Closed', 'Cancelled'] as const;
 export type SessionStatus = typeof sessionStatuses[number];
 
+// Preserve the backend contract; the interface has only two lifecycle states.
+export function isSessionActive(session: Pick<TableSession, 'sessionStatus'>): boolean {
+  return session.sessionStatus === 'Active';
+}
+
 export interface TableSession {
   tableSessionId: number;
   sessionGuid: string;
@@ -12,7 +17,7 @@ export interface TableSession {
   waiterUserId: number | null;
 }
 
-export type SessionErrorKind = 'invalid' | 'not-found' | 'server' | 'connection' | 'response';
+export type SessionErrorKind = 'invalid' | 'not-found' | 'server' | 'connection' | 'response' | 'unauthorized' | 'forbidden' | 'conflict';
 
 export class SessionError extends Error {
   readonly kind: SessionErrorKind;
@@ -80,20 +85,39 @@ export async function getTableSession(
 export async function createTableSession(
   tableId: number,
   accessToken: string,
-  options: { fetcher?: typeof fetch } = {},
+  options: { signal?: AbortSignal; fetcher?: typeof fetch } = {},
 ): Promise<TableSession> {
-  const response = await (options.fetcher ?? fetch)('/api/table-sessions', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ tableId }),
-  });
-
-  if (!response.ok) throw new SessionError(response.status === 409 ? 'response' : 'server');
-  const data: unknown = await response.json();
-  if (!isTableSession(data)) throw new SessionError('response');
+  if (!Number.isSafeInteger(tableId) || tableId <= 0) throw new SessionError('invalid');
+  if (!accessToken.trim()) throw new SessionError('unauthorized');
+  let response: Response;
+  try {
+    response = await (options.fetcher ?? fetch)('/api/table-sessions', {
+      method: 'POST',
+      signal: options.signal,
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ tableId }),
+    });
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new SessionError('connection');
+  }
+  if (response.status === 400) throw new SessionError('invalid');
+  if (response.status === 401) throw new SessionError('unauthorized');
+  if (response.status === 403) throw new SessionError('forbidden');
+  if (response.status === 409) throw new SessionError('conflict');
+  if (response.status >= 500) throw new SessionError('server');
+  if (!response.ok) throw new SessionError('response');
+  let data: unknown;
+  try { data = await response.json(); }
+  catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new SessionError('response');
+  }
+  if (!isTableSession(data) || data.tableId !== tableId || !isSessionActive(data)) throw new SessionError('response');
   return data;
 }
